@@ -42,7 +42,7 @@
             <NotGenerated>0</NotGenerated>
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
-          <OutputDirectory>.\Output\</OutputDirectory>
+	  <OutputDirectory>.\Output\</OutputDirectory>
           <OutputName>bldc</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
@@ -349,7 +349,7 @@
             <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\Code\main.c</FilePath>
+	      <FilePath>.\Code\main.c</FilePath>
             </File>
           </Files>
         </Group>
