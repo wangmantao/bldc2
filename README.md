@@ -11,7 +11,7 @@
 
 ### Q&A
 	- 听说串口只能烧BIN文件。
-		- keil 自动输出bin。[keil_bin](https://wenku.baidu.com/view/2307570c90c69ec3d5bb75c1.html)
+		- keil 自动输出bin。 [keil_bin](https://wenku.baidu.com/view/2307570c90c69ec3d5bb75c1.html)
 ### 相关软件
 	- Nu-Link USB Driver 保存位置 ：C:\Program Files (x86)\Nuvoton Tools\Nu-Link_Keil
 	 
