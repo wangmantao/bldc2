@@ -1,0 +1,22 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+C:\WorkFolder\0.Product_all\01.FA8265\Release_temp\BSP_Bakeup\N76E003_BSP_Keil_C51_V1.0.3\Sample_Code\ADC_Bandgap_VDD\ADC.uvproj
+Project File Date:  06/26/2017
+
+<h2>Output:</h2>
+Rebuild target 'ADC'
+compiling ADC.C...
+Code\ADC.C(86): error C202: 'ADCdataH': undefined identifier
+Code\ADC.C(87): error C202: 'ADCdataL': undefined identifier
+Code\ADC.C(92): error C202: 'ADCsumH': undefined identifier
+Code\ADC.C(93): error C202: 'ADCsumL': undefined identifier
+Code\ADC.C(96): error C202: 'ADCavgH': undefined identifier
+Code\ADC.C(97): error C202: 'ADCavgL': undefined identifier
+Code\ADC.C(99): error C202: 'ADCavgH': undefined identifier
+compiling Common.c...
+compiling Delay.c...
+assembling STARTUP.A51...
+Target not created

@@ -1,0 +1,138 @@
+C51 COMPILER V9.52.0.0   ADC                                                               09/26/2017 19:58:51 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE ADC
+OBJECT MODULE PLACED IN .\Output\ADC.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE Code\ADC.C OPTIMIZE(4,SPEED) BROWSE INCDIR(..\..\Include) DEFINE(FOSC_16000
+                    -0) DEBUG OBJECTEXTEND PRINT(.\LST\ADC.lst) TABS(2) OBJECT(.\Output\ADC.obj)
+
+line level    source
+
+   1          /*--------------------------------------------------------------------------------------------------------
+             --*/
+   2          /*                                                                                                        
+             - */
+   3          /* Copyright(c) 2017 Nuvoton Technology Corp. All rights reserved.                                        
+             - */
+   4          /*                                                                                                        
+             - */
+   5          /*--------------------------------------------------------------------------------------------------------
+             --*/
+   6          
+   7          //********************************************************************************************************
+             -***
+   8          //  Nuvoton Technoledge Corp. 
+   9          //  Website: http://www.nuvoton.com
+  10          //  E-Mail : MicroC-8bit@nuvoton.com
+  11          //  Date   : Apr/21/2017
+  12          //********************************************************************************************************
+             -***
+  13          
+  14          //********************************************************************************************************
+             -***
+  15          //  File Function: N76E003 ADC demo code
+  16          //********************************************************************************************************
+             -***
+  17          
+  18          #include "N76E003.h"
+  19          #include "SFR_Macro.h"
+  20          #include "Function_define.h"
+  21          #include "Common.h"
+  22          #include "Delay.h"
+  23          
+  24          
+  25          //*****************  The Following is in define in Fucntion_define.h  ***************************
+  26          //****** Always include Function_define.h call the define you want, detail see main(void) *******
+  27          //***********************************************************************************************
+  28          
+  29          double  Bandgap_Voltage,VDD_Voltage;      //please always use "double" mode for this
+  30              
+  31          void ADC_Bypass (void)                    // First three times band-gap convert result bypass
+  32          {
+  33   1          unsigned char ozc;
+  34   1          for (ozc=0;ozc<0x03;ozc++)
+  35   1          {
+  36   2            clr_ADCF;
+  37   2            set_ADCS;
+  38   2            while(ADCF == 0);
+  39   2          }
+  40   1      }
+  41              
+  42          void READ_BANDGAP()                       // Read band-gap actually value after UID two byte.
+  43          {                                         // Detail description see datasheet V1.02 band-gap chapter.
+  44   1          UINT8 BandgapHigh,BandgapLow;
+  45   1          double Bandgap_Value;                 // always use double mode define.
+C51 COMPILER V9.52.0.0   ADC                                                               09/26/2017 19:58:51 PAGE 2   
+
+  46   1        
+  47   1          set_IAPEN;
+  48   1          IAPAL = 0x0C;
+  49   1          IAPAH = 0x00;
+  50   1          IAPCN = READ_UID;
+  51   1          set_IAPGO;
+  52   1          BandgapHigh = IAPFD;
+  53   1          IAPAL = 0x0d;
+  54   1          IAPAH = 0x00;
+  55   1          IAPCN = READ_UID;
+  56   1          set_IAPGO;
+  57   1          BandgapLow = IAPFD;
+  58   1          BandgapLow = BandgapLow&0x0F;
+  59   1          clr_IAPEN;
+  60   1          Bandgap_Value = (BandgapHigh<<4)+BandgapLow;
+  61   1          Bandgap_Voltage = 3072/(0x0fff/Bandgap_Value);
+  62   1      }
+  63                
+  64          /******************************************************************************
+  65          The main C function.  Program execution starts
+  66          here after stack initialization.
+  67          ******************************************************************************/
+  68          void main (void) 
+  69          {
+  70   1      
+  71   1          double bgvalue;
+  72   1          unsigned int i;
+  73   1          set_CLOEN;
+  74   1          P12_Quasi_Mode;                           //For GPIO1 output, Find in "Function_define.h" - "GPIO INIT"
+  75   1          InitialUART0_Timer1(115200);
+  76   1          READ_BANDGAP();
+  77   1          Enable_ADC_BandGap;                       //Find in "Function_define.h" - "ADC INIT"
+  78   1          ADC_Bypass();
+  79   1      
+  80   1          for(i=0;i<5;i++)
+  81   1          {
+  82   2            Timer0_Delay1ms(20);
+  83   2            clr_ADCF;
+  84   2            set_ADCS;                 // ADC start trig signal
+  85   2            while(ADCF == 0);
+  86   2            ADCdataH[i] = ADCRH;
+*** ERROR C202 IN LINE 86 OF Code\ADC.C: 'ADCdataH': undefined identifier
+  87   2            ADCdataL[i] = ADCRL;
+*** ERROR C202 IN LINE 87 OF Code\ADC.C: 'ADCdataL': undefined identifier
+  88   2          }   
+  89   1          
+  90   1          for(i=0;i<5;i++)
+  91   1          {
+  92   2            ADCsumH = ADCsumH + ADCdataH[i];
+*** ERROR C202 IN LINE 92 OF Code\ADC.C: 'ADCsumH': undefined identifier
+  93   2            ADCsumL = ADCsumL + ADCdataL[i];
+*** ERROR C202 IN LINE 93 OF Code\ADC.C: 'ADCsumL': undefined identifier
+  94   2          }       
+  95   1      
+  96   1          ADCavgH = ADCsumH/5;
+*** ERROR C202 IN LINE 96 OF Code\ADC.C: 'ADCavgH': undefined identifier
+  97   1          ADCavgL = ADCsumL/5;
+*** ERROR C202 IN LINE 97 OF Code\ADC.C: 'ADCavgL': undefined identifier
+  98   1        
+  99   1          bgvalue = (ADCavgH<<4) + ADCavgL;
+*** ERROR C202 IN LINE 99 OF Code\ADC.C: 'ADCavgH': undefined identifier
+ 100   1          VDD_Voltage = (0x1000/bgvalue)*Bandgap_Voltage;
+C51 COMPILER V9.52.0.0   ADC                                                               09/26/2017 19:58:51 PAGE 3   
+
+ 101   1      //    printf ("\n Bandgap voltage = %e", Bandgap_Voltage); 
+ 102   1      //    printf ("\n VDD voltage = %e", VDD_Voltage); 
+ 103   1          while(1);
+ 104   1      }
+ 105          
+ 106          
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  7 ERROR(S)
