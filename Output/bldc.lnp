@@ -1,3 +1,0 @@
-".\Output\main.obj" 
-TO ".\Output\bldc" 
-PRINT(".\LST\bldc.m51") RAMSIZE(256) 

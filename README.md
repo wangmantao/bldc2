@@ -3,9 +3,13 @@
 
 ### 进展 
 
-	- 怎么开始一个nu实验
-
-	- 目标 
+	- 目标2：完成一路PWM受控
+		1. 引脚模式设置(push pull) -- GPIO_Init()
+		2. 高级定时器配置 -- Tim1_init()
+			- Tim1 是怎么控制三个引脚的。怎么与PC3关联的
+			- Tim1 有OC1, OC2, OC3 每个OC有对应的引脚 (定时器输出）
+			- 每个OC设置了哪些功能? 1,输出模式(PWM1)，
+	- 目标1: 
 		- 编译一个sample sample.hex
 		- hex 通过nu-link download TO MCU 1. 编译一个sample. 得一个sample.hex
 
