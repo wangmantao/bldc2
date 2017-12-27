@@ -288,7 +288,7 @@ main()
 	Tim1_init();//高级定时器配置	
 	
 	//初始化无感比较端口 -- B5 D6
-	//SensorlessEXTI_INIT();//电机启动, 端口初始化配置	
+	SensorlessEXTI_INIT();//电机启动, 端口初始化配置	
 
 	if(Sensorless_START()==0)//如果启动失败
 	{
