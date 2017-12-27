@@ -21,4 +21,6 @@ LST/
 Output/
 *.bak
 *.exe
+*.uvopt
+
 
