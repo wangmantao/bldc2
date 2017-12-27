@@ -15,14 +15,13 @@
 #define DOWN_A_ON clr_P00
 #define DOWN_B_ON clr_P11
 #define DOWN_C_ON clr_P03
-#define PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04}
 
 /* ------- 定义变量 --------------*/
 unsigned int i = 0;
 unsigned char workstep = 0;
 unsigned int pwmduty = 0;
 static const unsigned int pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY));
-
+const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
 /* ---------- 定义函数 --------------*/
 // 系统时钟配置: 内部16M
 void clkConf(){
@@ -48,12 +47,12 @@ void setDuty(unsigned int dutyvalue){
 void pwmConf(){
 	set_CLRPWM;     		// clrear pwm counter
 					//PWM_CLOCK_DIV_8;	// sysClk / 8 for pwm
-	PWM_GP_MODE_ENABLE		// use group mode
+	PWM_GP_MODE_ENABLE;		// use group mode
 	PWMPH = (unsigned char) pwm >> 8;  // set pwm frequnce	
 	PWMPL = (unsigned char) pwm; 
 	
 	PMD = 0X00;			// wen masked, 00: ground / FF: vcc
-	PWM_OUTPUT_ALL_NORMAL		// set on_duty is hight/low & _INVERSE
+	PWM_OUTPUT_ALL_NORMAL;		// set on_duty is hight/low & _INVERSE
 }
 
 void pwmStart(){
@@ -94,12 +93,12 @@ void setCommutation(unsigned char workstep, unsigned int dutyv){
 	  	DOWN_B_ON;
 	}
 	
-	PMEN = ~PWM_MARSK_TABLE[workstep];	// one chanel pwm open
+	PMEN = ~ PWM_MARSK_TABLE[workstep];	// one chanel pwm open
 }
 
 void preLoc(){
 	workstep = 5;		
-	pwmduty = pwm * PWMOUT /100      // duty cicy
+	pwmduty = pwm * PWMOUT /100;      // duty cicy
 	setCommutation(workstep, pwmduty);
  	for(i=0; i<1000; i++); 	// delay
 }
