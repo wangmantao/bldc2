@@ -10,8 +10,8 @@ FOR BLDC 2017
 /* ---------- 定义常量 --------------*/
 #define STM8_FREQ_MHZ 16 
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
-#define PWMOUT 20 			//预定位（proLoc）占空比
-#define PWMOUT_2 15 			//启动（）占空比
+#define PWMOUT 80 			//预定位（proLoc）占空比
+#define PWMOUT2 5 			//启动（）占空比
 #define DOWN_A_ON set_P00
 #define DOWN_B_ON set_P11
 #define DOWN_C_ON set_P03
@@ -22,9 +22,11 @@ FOR BLDC 2017
 /* ------- 定义变量 --------------*/
 unsigned int i = 0;
 unsigned char workstep = 0;
-unsigned int pwmduty = 0;
 unsigned char startOk = 0;
-static const unsigned int pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) - 1 );
+// PWM 占空比的寄存器值 （PWMPH/PWMPL)
+static unsigned int duty = 0;
+// PWM 频率的寄存器值 （PWMPH/PWMPL)
+static const unsigned long pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) ); 
 const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
 /* ---------- 定义函数 --------------*/
 // 系统时钟配置: 内部16M
@@ -40,6 +42,8 @@ void ioConf(){
 	P00_PushPull_Mode; 		//downA
 	P11_PushPull_Mode; 		// downB
 	P03_PushPull_Mode; 		// downC
+
+	P04_PushPull_Mode; 		// downC
 }
 
 void pwmConf(){
@@ -60,7 +64,22 @@ void pwmStart(){
 	set_PWMRUN;
 }
 
-void setCommutation(unsigned char workstep, unsigned int dutyv){
+void pwmStop(){
+	//clr_EPWM;    			//Enable PWM interrupt
+	clr_EA;
+	clr_LOAD;
+	clr_PWMRUN;
+}
+
+/*
+void setDuty(unsigned int dutyv){
+	PWM0H =(unsigned char) (dutyv >> 8);    // set duty 
+	PWM0L =(unsigned char) dutyv; 
+}
+*/
+
+//void setCommutation(unsigned char workstep, unsigned int dutyv){
+void setCommutation(unsigned char workstep){
 	PMEN = 0xFF;				// pwm output all off
 
 	if(workstep!=3&&workstep!=4)
@@ -70,8 +89,9 @@ void setCommutation(unsigned char workstep, unsigned int dutyv){
 	if(workstep!=1&&workstep!=2)
 	    DOWN_C_OFF;
 
-	PWM0H =(unsigned char) (dutyv>> 8);    // set duty 
-	PWM0L =(unsigned char) dutyv; 
+	//setDuty(dutyv);
+	PWM0H =(unsigned char) (duty >> 8);    // set duty 
+	PWM0L =(unsigned char) duty; 
 
 	if(workstep==0) {			//AB
 		DOWN_B_ON;
@@ -97,9 +117,11 @@ void setCommutation(unsigned char workstep, unsigned int dutyv){
 
 void preLoc(){
 	workstep = 5;		
-	pwmduty = pwm * PWMOUT /100;      	// duty cicy(location stage)
-	setCommutation(workstep, pwmduty);
- 	for(i=0; i<1000; i++); 	// delay
+	//duty=pwm*PWMOUT/100;      	// duty cicy(location stage)
+	duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
+	//setCommutation(workstep, pwmduty);
+	setCommutation(workstep);
+ 	//for(i=0; i<16000; i++); 	// delay
 }
 
 unsigned char  bldcStart(){
@@ -108,10 +130,9 @@ unsigned char  bldcStart(){
 	do{					   // only one pass, not need do this
 		workstep++; actCount++;
 		if(workstep >=6 ) workstep = 0;
-		pwmduty = pwm * PWMOUT2 /100;      // duty cicy(start stage)
-		setCommutation(workstep, pwmduty);	
+		setCommutation(workstep);	
  		for(i=0; i<6000; i++); 	// delay
-	}while(actCount < 200 && startOk == 0)	   // action not enough, and start fail 
+	}while(actCount < 200 && startOk == 0);   // action not enough, and start fail 
 
 	if(actCount >= 200){
 		return 0; 	// ng
@@ -123,16 +144,30 @@ unsigned char  bldcStart(){
 void main(){
 	unsigned char step = 0;
 	Set_All_GPIO_Quasi_Mode;
-	for (i = 0; i < 50000; ++i); 	// deylay 
+	for (i = 0; i < 5000; ++i); 	// deylay 
 
 	clkConf();
 	ioConf();
 	pwmConf();
 	preLoc();			// the time is not sure
+
+	clr_P04;
+ 	//for(i=0; i<8000; i++); 	// delay
+	Timer0_Delay1ms(50);
+
+	set_P04;
 	pwmStart();
 
-	if(bldcStart == 0){
-		while(1)		// no started to stop all
+	//clr_P04;
+ 	//for(i=0; i<8000; i++); 	// delay
+	Timer0_Delay1ms(50);
+	pwmStop();
+	//set_P04;
+	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty cicy(location stage)
+	pwmStart();
+	if(bldcStart() == 0){
+		//pwmStop();
+		while(1);		// no started to stop all
 	}	
 	while (1){
 	}
