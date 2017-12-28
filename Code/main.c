@@ -23,6 +23,7 @@ FOR BLDC 2017
 unsigned int i = 0;
 unsigned char workstep = 0;
 unsigned int pwmduty = 0;
+unsigned char startOk = 0;
 static const unsigned int pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) - 1 );
 const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
 /* ---------- 定义函数 --------------*/
@@ -36,9 +37,9 @@ void ioConf(){
 	PWM4_P01_OUTPUT_ENABLE; 	// upB
 	PWM2_P10_OUTPUT_ENABLE; 	// upC
 
-	P00_PushPull_Mode; 	//downA
-	P11_PushPull_Mode; 	// downB
-	P03_PushPull_Mode; 	// downC
+	P00_PushPull_Mode; 		//downA
+	P11_PushPull_Mode; 		// downB
+	P03_PushPull_Mode; 		// downC
 }
 
 void pwmConf(){
@@ -53,7 +54,7 @@ void pwmConf(){
 }
 
 void pwmStart(){
-	//set_EPWM;    		//Enable PWM interrupt
+	//set_EPWM;    			//Enable PWM interrupt
 	set_EA;
 	set_LOAD;
 	set_PWMRUN;
@@ -68,8 +69,10 @@ void setCommutation(unsigned char workstep, unsigned int dutyv){
 	    DOWN_B_OFF;
 	if(workstep!=1&&workstep!=2)
 	    DOWN_C_OFF;
-	PWM0H =(unsigned char) (dutyv>> 8);           // set duty 
+
+	PWM0H =(unsigned char) (dutyv>> 8);    // set duty 
 	PWM0L =(unsigned char) dutyv; 
+
 	if(workstep==0) {			//AB
 		DOWN_B_ON;
 	}
@@ -94,9 +97,26 @@ void setCommutation(unsigned char workstep, unsigned int dutyv){
 
 void preLoc(){
 	workstep = 5;		
-	pwmduty = pwm * PWMOUT /100;      // duty cicy
+	pwmduty = pwm * PWMOUT /100;      	// duty cicy(location stage)
 	setCommutation(workstep, pwmduty);
- 	//for(i=0; i<100; i++); 	// delay
+ 	for(i=0; i<1000; i++); 	// delay
+}
+
+unsigned char  bldcStart(){
+	unsigned int actCount;
+	startOk = 0;
+	do{					   // only one pass, not need do this
+		workstep++; actCount++;
+		if(workstep >=6 ) workstep = 0;
+		pwmduty = pwm * PWMOUT2 /100;      // duty cicy(start stage)
+		setCommutation(workstep, pwmduty);	
+ 		for(i=0; i<6000; i++); 	// delay
+	}while(actCount < 200 && startOk == 0)	   // action not enough, and start fail 
+
+	if(actCount >= 200){
+		return 0; 	// ng
+	}	
+	return 1;		// ok
 }
 
 /* 定义功能函数 */
@@ -110,6 +130,10 @@ void main(){
 	pwmConf();
 	preLoc();			// the time is not sure
 	pwmStart();
+
+	if(bldcStart == 0){
+		while(1)		// no started to stop all
+	}	
 	while (1){
 	}
 }
