@@ -12,18 +12,27 @@ FOR BLDC 2017
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
 #define PWMOUT 80 			//预定位（proLoc）占空比
 #define PWMOUT2 5 			//启动（）占空比
-#define DOWN_A_ON set_P00
+/*
+#define DOWN_A_ON set_P00			// this for high level avalable
 #define DOWN_B_ON set_P11
 #define DOWN_C_ON set_P03
 #define DOWN_A_OFF clr_P00
 #define DOWN_B_OFF clr_P11
 #define DOWN_C_OFF clr_P03
+*/
+
+#define DOWN_A_ON clr_P00			// this for  low level avalable
+#define DOWN_B_ON clr_P11
+#define DOWN_C_ON clr_P03
+#define DOWN_A_OFF set_P00
+#define DOWN_B_OFF set_P11
+#define DOWN_C_OFF set_P03
 
 /* ------- 定义变量 --------------*/
 unsigned int i = 0;
 unsigned char workstep = 0;
 unsigned char startOk = 0;
-// PWM 占空比的寄存器值 （PWMPH/PWMPL)
+// PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
 static const unsigned long pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) ); 
@@ -35,26 +44,28 @@ void clkConf(){
 }
 
 void ioConf(){
+	PWM_GP_MODE_ENABLE;		// use group mode
 	PWM0_P12_OUTPUT_ENABLE; 	// upA
 	PWM4_P01_OUTPUT_ENABLE; 	// upB
 	PWM2_P10_OUTPUT_ENABLE; 	// upC
 
-	P00_PushPull_Mode; 		//downA
-	P11_PushPull_Mode; 		// downB
-	P03_PushPull_Mode; 		// downC
+	P00_PushPull_Mode; 			//downA
+	P11_PushPull_Mode; 			// downB
+	P03_PushPull_Mode; 			// downC
 
-	P04_PushPull_Mode; 		// downC
+	//P04_PushPull_Mode; 			// for test referrence 
 }
 
 void pwmConf(){
 	set_CLRPWM;     		// clrear pwm counter
-					//PWM_CLOCK_DIV_8;	// sysClk / 8 for pwm
+							//PWM_CLOCK_DIV_8;	// sysClk / 8 for pwm
 	PWM_GP_MODE_ENABLE;		// use group mode
 	PWMPH = (unsigned char) (pwm >> 8);  // set pwm frequnce	
 	PWMPL = (unsigned char) pwm; 
 	
-	PMD = 0XFF;			// wen masked, 00: ground / FF: vcc
-	PWM_OUTPUT_ALL_NORMAL;		// set on_duty is hight/low & _INVERSE
+	/* 上管高电平有效，平时不动作是，因为低电平 */
+	PMD = 0X00;				// wen masked, 00: ground / FF: vcc (note: upFET-off)
+	PWM_OUTPUT_ALL_NORMAL;		// set on_duty is [default]hight:low ( [default]NORMAL: INVERSE )
 }
 
 void pwmStart(){
@@ -71,12 +82,12 @@ void pwmStop(){
 	clr_PWMRUN;
 }
 
-/*
-void setDuty(unsigned int dutyv){
-	PWM0H =(unsigned char) (dutyv >> 8);    // set duty 
-	PWM0L =(unsigned char) dutyv; 
+void setDuty(){
+	PWM0H =(unsigned char) (duty >> 8);    // set duty 
+	PWM0L =(unsigned char) duty; 
+	while( !(LOAD == 0X00) );				// whait LOAD reset 0 by self
+	set_LOAD;
 }
-*/
 
 //void setCommutation(unsigned char workstep, unsigned int dutyv){
 void setCommutation(unsigned char workstep){
@@ -89,9 +100,7 @@ void setCommutation(unsigned char workstep){
 	if(workstep!=1&&workstep!=2)
 	    DOWN_C_OFF;
 
-	//setDuty(dutyv);
-	PWM0H =(unsigned char) (duty >> 8);    // set duty 
-	PWM0L =(unsigned char) duty; 
+	setDuty(duty);
 
 	if(workstep==0) {			//AB
 		DOWN_B_ON;
@@ -142,29 +151,22 @@ unsigned char  bldcStart(){
 
 /* 定义功能函数 */
 void main(){
-	unsigned char step = 0;
 	Set_All_GPIO_Quasi_Mode;
-	for (i = 0; i < 5000; ++i); 	// deylay 
+	clr_P12; 	// upA
+	clr_P01; 	// upB
+	clr_P10; 	// upC
+
+	Timer0_Delay1ms(800);
 
 	clkConf();
 	ioConf();
-	pwmConf();
-	preLoc();			// the time is not sure
-
-	clr_P04;
- 	//for(i=0; i<8000; i++); 	// delay
-	Timer0_Delay1ms(50);
-
-	set_P04;
-	pwmStart();
-
-	//clr_P04;
- 	//for(i=0; i<8000; i++); 	// delay
-	Timer0_Delay1ms(50);
-	pwmStop();
-	//set_P04;
+	//pwmConf();
+	//preLoc();			
+	//pwmStart();
+	Timer0_Delay1ms(200);		// preLocation delay 
+	//pwmStop();
 	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty cicy(location stage)
-	pwmStart();
+	//pwmStart();
 	if(bldcStart() == 0){
 		//pwmStop();
 		while(1);		// no started to stop all
