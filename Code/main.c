@@ -11,7 +11,7 @@ FOR BLDC 2017
 #define STM8_FREQ_MHZ 16 
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
 #define PWMOUT 30 			//预定位（proLoc）占空比
-#define PWMOUT2 30 			//启动（）占空比
+#define PWMOUT2 50 			//启动（）占空比
 /*
 #define DOWN_A_ON set_P00			// this for high level avalable
 #define DOWN_B_ON set_P11
@@ -32,6 +32,7 @@ FOR BLDC 2017
 static unsigned char startOk = 0;
 static unsigned char workstep = 0;
 static	unsigned int actCount = 0;
+static	unsigned int change_delay = 50;
 // PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
@@ -86,8 +87,10 @@ void setDuty(){
 	set_LOAD;
 }
 
+//void setCommutation(unsigned char workstep, unsigned int dutyv){
 void setCommutation(unsigned char workstep){
 	//PMEN = 0xFF;				// pwm output all off
+
 	if(workstep!=3&&workstep!=4)
 	    DOWN_A_OFF;
 	if(workstep!=0&&workstep!=5)
@@ -134,11 +137,26 @@ unsigned char  bldcStart(){
 		workstep++; actCount++;
 		if(workstep >=6 ) workstep = 0;
 		setCommutation(workstep);	
-		Timer0_Delay1ms(20);
-		//Timer0_Delay100us(50);
-	}while(actCount < 5000 && startOk == 0);   // action not enough, and start fail 
+		switch (actCount){
+			case 24: change_delay = 50;
+			break;
+			case 48: change_delay = 40;
+			break;
+			//case 52: change_delay = 30;
+			//break;
+			//case 76: change_delay = 20;
+			//break;
+			//case 100: change_delay = 10;
+			//break;
+			//case 140: change_delay = 5;
+			//break;
+		}
 
-	if(actCount >= 5000){
+		Timer0_Delay1ms(change_delay);
+		//Timer0_Delay100us(50);
+	}while(actCount <1000 && startOk == 0);   // action not enough, and start fail 
+
+	if(actCount >= 1000){
 		return 0; 	// ng
 	}	
 	return 1;		// ok
@@ -148,15 +166,14 @@ void keepAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
 	duty = 0x00; setDuty(); 	// keep low for PWM mode start
 	DOWN_A_OFF; DOWN_B_OFF; DOWN_C_OFF;
-	pwmStop();
+	//pwmStop();
 }
-
 
 void keepUpAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
 	duty = 0x00; setDuty(); 	// keep low for PWM mode start
-	DOWN_A_ON; DOWN_B_ON; DOWN_C_ON; // defferent to alloff
-	pwmStop();
+	DOWN_A_ON; DOWN_B_ON; DOWN_C_ON;
+	//pwmStop();
 }
 
 /* 定义功能函数 */
@@ -170,12 +187,13 @@ void main(){
 	preLoc();			
 	pwmStart();
 	Timer0_Delay1ms(500);		// preLocation delay 
-	pwmStop();
+	//pwmStop();
 	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty cicy(location stage)
 	setDuty();
-	pwmStart();
+	//pwmStart();
 	if(bldcStart() == 0){
-		keepUpAllOff(); 	// prevent BEV to hight
+		//keepAllOff();
+		keepUpAllOff();
 		while(1);		// no started to stop all
 	}	
 	while (1){
