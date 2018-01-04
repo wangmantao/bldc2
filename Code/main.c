@@ -86,10 +86,8 @@ void setDuty(){
 	set_LOAD;
 }
 
-//void setCommutation(unsigned char workstep, unsigned int dutyv){
 void setCommutation(unsigned char workstep){
 	//PMEN = 0xFF;				// pwm output all off
-
 	if(workstep!=3&&workstep!=4)
 	    DOWN_A_OFF;
 	if(workstep!=0&&workstep!=5)
@@ -153,6 +151,14 @@ void keepAllOff(){
 	pwmStop();
 }
 
+
+void keepUpAllOff(){
+	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
+	duty = 0x00; setDuty(); 	// keep low for PWM mode start
+	DOWN_A_ON; DOWN_B_ON; DOWN_C_ON; // defferent to alloff
+	pwmStop();
+}
+
 /* 定义功能函数 */
 void main(){
 	Set_All_GPIO_Quasi_Mode;
@@ -169,7 +175,7 @@ void main(){
 	setDuty();
 	pwmStart();
 	if(bldcStart() == 0){
-		keepAllOff();
+		keepUpAllOff(); 	// prevent BEV to hight
 		while(1);		// no started to stop all
 	}	
 	while (1){
