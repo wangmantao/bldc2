@@ -54,7 +54,7 @@ void ioConf(){
 	P11_PushPull_Mode; 			// downB
 	P03_PushPull_Mode; 			// downC
 
-	//P04_PushPull_Mode; 			// for test referrence 
+	P04_PushPull_Mode; 			// for test referrence 
 }
 
 void pwmConf(){
@@ -69,14 +69,12 @@ void pwmConf(){
 
 void pwmStart(){
 	set_EPWM;    			//Enable PWM interrupt
-	set_EA;
-	set_LOAD;
+	set_LOAD;         // load PWM duty from buffer
 	set_PWMRUN;
 }
 
 void pwmStop(){
 	clr_EPWM;    			//Enable PWM interrupt
-	clr_EA;
 	clr_PWMRUN;
 }
 
@@ -166,23 +164,39 @@ void keepAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
 	duty = 0x00; setDuty(); 	// keep low for PWM mode start
 	DOWN_A_OFF; DOWN_B_OFF; DOWN_C_OFF;
-	//pwmStop();
 }
 
 void keepUpAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
 	duty = 0x00; setDuty(); 	// keep low for PWM mode start
 	DOWN_A_ON; DOWN_B_ON; DOWN_C_ON;
-	//pwmStop();
+}
+
+void adcConf(){
+  set_ADCEX;            // use extern trig the ADC (include ADCS bit )
+  PWM0_FALLINGEDGE_TRIG_ADC;  //external trig source is pwm0 & falling 
+  set_ADCHS0;           // AIN 0 as ana signal
+
+  clr_ADCF;             // AD finish, ADCF set 1 automatic
+  set_ADCEN;                     // start ADC module
+}
+
+void adcHandle() interrupt 11 {
+  set_P04;
+	Timer0_Delay1ms(1);
+  clr_P04;
+  clr_ADCF;             // AD finish, ADCF set 1 automatic
 }
 
 /* 定义功能函数 */
 void main(){
 	Set_All_GPIO_Quasi_Mode;
+	set_EA;           // Enable all interrupt (p194, 中断向量表）
 	keepAllOff();
 	clkConf();
 	ioConf();
 	pwmConf();
+	adcConf();
 	Timer0_Delay1ms(50);
 	preLoc();			
 	pwmStart();
