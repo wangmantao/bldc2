@@ -29,6 +29,7 @@ FOR BLDC 2017
 #define DOWN_C_OFF set_P03
 
 /* ------- 定义变量 --------------*/
+static unsigned char i = 0;
 static unsigned char startOk = 0;
 static unsigned char workstep = 0;
 static	unsigned int actCount = 0;
@@ -68,7 +69,7 @@ void pwmConf(){
 }
 
 void pwmStart(){
-	set_EPWM;    			//Enable PWM interrupt
+	//set_EPWM;    			//Enable PWM interrupt
 	set_LOAD;         // load PWM duty from buffer
 	set_PWMRUN;
 }
@@ -151,7 +152,6 @@ unsigned char  bldcStart(){
 		}
 
 		Timer0_Delay1ms(change_delay);
-		//Timer0_Delay100us(50);
 	}while(actCount <1000 && startOk == 0);   // action not enough, and start fail 
 
 	if(actCount >= 1000){
@@ -173,38 +173,43 @@ void keepUpAllOff(){
 }
 
 void adcConf(){
-  set_ADCEX;            // use extern trig the ADC (include ADCS bit )
-  PWM0_FALLINGEDGE_TRIG_ADC;  //external trig source is pwm0 & falling 
-  set_ADCHS0;           // AIN 0 as ana signal
-
-  clr_ADCF;             // AD finish, ADCF set 1 automatic
-  set_ADCEN;                     // start ADC module
-}
+	/*
+	clr_ADCEX;            // use extern trig the ADC (include ADCS bit )
+	//ADCEX = 1;
+	PWM0_FALLINGEDGE_TRIG_ADC;  //external trig source is pwm0 & falling 
+	set_ADCHS0;           // AIN 0 as ana signal
+	clr_ADCF;             // AD finish, ADCF set 1 automatic set_EADC;				// enable ADC set_ADCEN;           // start ADC module
+	*/
+	ADCCON0 = 0X00;
+ 	ADCCON1 = 0X03; // ADCEX = 1; ADCEN = 1
+ }
 
 void adcHandle() interrupt 11 {
   set_P04;
-	Timer0_Delay1ms(1);
+	//Timer0_Delay1ms(1);
+  for(i=0; i<100; i++);
   clr_P04;
   clr_ADCF;             // AD finish, ADCF set 1 automatic
+  //clr_ADCS;			// reset by hardware
 }
 
 /* 定义功能函数 */
 void main(){
 	Set_All_GPIO_Quasi_Mode;
-	set_EA;           // Enable all interrupt (p194, 中断向量表）
+	IE = 0XC0;           // Enable all interrupt (p194, 中断向量表）
+  	clr_P04;
 	keepAllOff();
 	clkConf();
 	ioConf();
-	pwmConf();
 	adcConf();
+	pwmConf();
 	Timer0_Delay1ms(50);
 	preLoc();			
 	pwmStart();
 	Timer0_Delay1ms(500);		// preLocation delay 
 	//pwmStop();
 	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty cicy(location stage)
-	setDuty();
-	//pwmStart();
+	setDuty(); //pwmStart();
 	if(bldcStart() == 0){
 		//keepAllOff();
 		keepUpAllOff();
