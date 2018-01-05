@@ -1,6 +1,22 @@
 /*
+
 FOR BLDC 2017
+--Pin configure--
+HA   P12
+HB   P01
+HC   P10
+
+LA   P00
+LB   P11
+LC   P03
+
+EA   P30 AIN1
+EB   P07 AIN2
+EC   P06 AIN3
+HV   P17 AIN0
+
 */
+
 #include "N76E003.h"
 #include "Common.h"
 #include "SFR_Macro.h"
@@ -12,6 +28,7 @@ FOR BLDC 2017
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
 #define PWMOUT 30 			//预定位（proLoc）占空比
 #define PWMOUT2 50 			//启动（）占空比
+
 /*
 #define DOWN_A_ON set_P00			// this for high level avalable
 #define DOWN_B_ON set_P11
@@ -99,10 +116,10 @@ void setCommutation(unsigned char workstep){
 
 	setDuty();
 
-	if(workstep==0) {			//AB
+	if(workstep==0) {			      //AB
 		DOWN_B_ON;
 	}
-  	else if(workstep==1) {			//AC
+  else if(workstep==1) {		 //AC
 	  	DOWN_C_ON;
 	}
 	else if(workstep==2) {			//BC
@@ -173,24 +190,67 @@ void keepUpAllOff(){
 }
 
 void adcConf(){
-	/*
-	clr_ADCEX;            // use extern trig the ADC (include ADCS bit )
-	//ADCEX = 1;
-	PWM0_FALLINGEDGE_TRIG_ADC;  //external trig source is pwm0 & falling 
-	set_ADCHS0;           // AIN 0 as ana signal
-	clr_ADCF;             // AD finish, ADCF set 1 automatic set_EADC;				// enable ADC set_ADCEN;           // start ADC module
-	*/
-	ADCCON0 = 0X00;
- 	ADCCON1 = 0X03; // ADCEX = 1; ADCEN = 1
+	ADCCON0 = 0X00;	 // ETGSEL =00  外部触发源选择:PWM0 
+ 	ADCCON1 = 0X03;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 1;
+	clr_ADCF;        // AD finish, ADCF set 1 automatic, and clear by manue
  }
 
+/* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
-  set_P04;
-	//Timer0_Delay1ms(1);
-  for(i=0; i<100; i++);
-  clr_P04;
-  clr_ADCF;             // AD finish, ADCF set 1 automatic
-  //clr_ADCS;			// reset by hardware
+    switch (ADCCON0 & 0X0F) {              // 取ADCHS(采样通道选择值)
+        case 0x00:                         // use AIN0 -- HV
+            set_P04;
+            for(i=0; i<10; i++);
+            clr_P04;
+
+            /* --------------------------------------
+            | AB AC BC BA CA CB       !a   !b   !c  |
+            | 0   1  2  3  4  5       2 5  1 4  0 3 |
+            ---------------------------------------*/
+            switch (workstep) {                // 选择悬空绕组
+                case 2:
+                case 5:
+                    Enable_ADC_AIN1; break;
+                case 1:
+                case 4:
+                    Enable_ADC_AIN2; break;
+                case 0:
+                case 3:
+                    Enable_ADC_AIN3; break;
+            }
+
+            break;
+        case 0x01:                        // use AIN1 -- A
+            set_P04;
+            for(i=0; i<5; i++);
+            clr_P04;
+            break;
+        case 0x02:                        // use AIN2 -- B
+            set_P04;
+            for(i=0; i<5; i++);
+            clr_P04;
+            break;
+        case 0x03:                        // use AIN3 -- C
+            set_P04;
+            for(i=0; i<5; i++);
+            clr_P04;
+            break;
+    }
+
+    /* --------------------------------------
+       | 因为PWM0 触发为了取HV
+       | 软ADCS软触发是为了取相势
+       ---------------------------------------*/
+    if (ADCCON1 & 0X02) {   // ADCEX 当前用的触发源：０－ADCS / 1－ PWM0
+        clr_ADCEX;          // 关闭PWM0触发
+        clr_ADCF;             // AD finish, ADCF set 1 automatic
+        set_ADCS;            // 开始取相势
+    }
+    else {
+        set_ADCEX;          // 开启PWM0触发
+        Enable_ADC_AIN0;
+        clr_ADCF;             // AD finish, ADCF set 1 automatic
+    }
 }
 
 /* 定义功能函数 */
