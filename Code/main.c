@@ -132,17 +132,29 @@ void setCommutation(unsigned char workstep){
       // (for commuation: 开启下管)
     switch (workstep) { 
         case 0:                            // AB
-            DOWN_B_ON; PWM0_ETGSEL_EN; Enable_ADC_AIN3; break;
+            DOWN_B_ON; PWM0_ETGSEL_EN; 
+            //Enable_ADC_AIN3; 
+            break;
         case 1:                            // AC
-            DOWN_C_ON; PWM0_ETGSEL_EN; Enable_ADC_AIN2; break;
+            DOWN_C_ON; PWM0_ETGSEL_EN; 
+            //Enable_ADC_AIN2; 
+            break;
         case 2:                            // BC
-            DOWN_C_ON; PWM4_ETGSEL_EN; Enable_ADC_AIN1; break;
+            DOWN_C_ON; PWM4_ETGSEL_EN; 
+            //Enable_ADC_AIN1; 
+            break;
         case 3:                            // BA
-            DOWN_A_ON; PWM4_ETGSEL_EN; Enable_ADC_AIN3; break;
+            DOWN_A_ON; PWM4_ETGSEL_EN; 
+            //Enable_ADC_AIN3; 
+            break;
         case 4:                            // CA
-            DOWN_A_ON; PWM2_ETGSEL_EN; Enable_ADC_AIN2; break;
+            DOWN_A_ON; PWM2_ETGSEL_EN; 
+            //Enable_ADC_AIN2; 
+            break;
         case 5:                            // CB
-            DOWN_B_ON; PWM2_ETGSEL_EN; Enable_ADC_AIN1; break;
+            DOWN_B_ON; PWM2_ETGSEL_EN; 
+            //Enable_ADC_AIN1; 
+            break;
     }
     PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
 }
@@ -206,6 +218,12 @@ void adcConf(){
 
 /* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
+	unsigned char AA = ADCRH;
+	unsigned char BB = ADCRL;
+	ADCMPH = 0x33;
+	ADCMPL = 0x44;
+	AA = ADCMPH;
+	BB = ADCMPL;
     switch (ADCCON0 & 0X0F) {              // 取ADCHS(采样通道选择值)
         case 0x00:                         // use AIN0 -- HV
             set_P04;
@@ -250,6 +268,7 @@ void main(){
 	Set_All_GPIO_Quasi_Mode;
 	IE = 0XC0;           // Enable all interrupt (p194, 中断向量表）
   	clr_P04;
+  	set_ADCMPEN;
 	keepAllOff();
 	clkConf();
 	ioConf();
