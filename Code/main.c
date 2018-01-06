@@ -64,6 +64,7 @@ static unsigned int actCount = 0;
 static unsigned int change_delay = 50;
 static unsigned int hv = 0;
 static unsigned int ev = 0;
+static unsigned char adchv = 0;
 // PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
@@ -84,6 +85,17 @@ void ioConf(){
     P00_PushPull_Mode; 			//downA
     P11_PushPull_Mode; 			// downB
     P03_PushPull_Mode; 			// downC
+
+    P06_Input_Mode;
+    clr_P06DIDS;
+    P07_Input_Mode;
+    clr_P07DIDS;
+    P06_Input_Mode;
+    clr_P06DIDS; 
+    P30_Input_Mode;
+    clr_P30DIDS;
+    P17_Input_Mode;
+    clr_P17DIDS;
 
     P04_PushPull_Mode; 			// for test referrence 
 }
@@ -135,27 +147,27 @@ void setCommutation(unsigned char workstep){
     switch (workstep) { 
         case 0:                            // AB
             DOWN_B_ON; PWM0_ETGSEL_EN; 
-            //Enable_ADC_AIN3; 
+            Enable_ADC_AIN3; 
             break;
         case 1:                            // AC
             DOWN_C_ON; PWM0_ETGSEL_EN; 
-            //Enable_ADC_AIN2; 
+            Enable_ADC_AIN2; 
             break;
         case 2:                            // BC
             DOWN_C_ON; PWM4_ETGSEL_EN; 
-            //Enable_ADC_AIN1; 
+            Enable_ADC_AIN1; 
             break;
         case 3:                            // BA
             DOWN_A_ON; PWM4_ETGSEL_EN; 
-            //Enable_ADC_AIN3; 
+            Enable_ADC_AIN3; 
             break;
         case 4:                            // CA
             DOWN_A_ON; PWM2_ETGSEL_EN; 
-            //Enable_ADC_AIN2; 
+            Enable_ADC_AIN2; 
             break;
         case 5:                            // CB
             DOWN_B_ON; PWM2_ETGSEL_EN; 
-            //Enable_ADC_AIN1; 
+            Enable_ADC_AIN1; 
             break;
     }
     PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
@@ -181,8 +193,8 @@ unsigned char  bldcStart(){
 			break;
 			case 48: change_delay = 40;
 			break;
-			//case 52: change_delay = 30;
-			//break;
+			case 52: change_delay = 30;
+			break;
 			//case 76: change_delay = 20;
 			//break;
 			//case 100: change_delay = 10;
@@ -220,21 +232,67 @@ void adcConf(){
 
 /* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
+	if (adchv == 1){	//AIN0
+		hv = ADCRH;
+        hv <<= 4;
+        hv |= (ADCRL & 0X0F);
+		if(ev < (hv/2)){
+	    	set_P04;
+        	for(i=0; i<3; i++);
+	        clr_P04;
+		}
+    	switch (workstep){
+    		case 0:	                  // AB
+	            Enable_ADC_AIN3; 
+	            break;
+	        case 1:                            // AC
+	            Enable_ADC_AIN2; 
+	            break;
+	        case 2:                            // BC
+	            Enable_ADC_AIN1; 
+	            break;
+	        case 3:                            // BA
+	            Enable_ADC_AIN3; 
+	            break;
+	        case 4:                            // CA
+	            Enable_ADC_AIN2; 
+	            break;
+	        case 5:                            // CB
+	            Enable_ADC_AIN1; 
+	            break;
+		}
+    	adchv = 0;	 
+	    clr_ADCF; 
+	}
+	else{
+		ev = ADCRH;
+        ev <<= 4;
+        ev |= (ADCRL & 0X0F);
+
+		set_P04;
+        clr_P04;
+        Enable_ADC_AIN0;
+        adchv = 1;
+        clr_ADCF;
+        set_ADCS;
+	}
+	/*
     switch (ADCCON0 & 0X0F) {              // 取ADCHS(采样通道选择值)
         case 0x00:                         // use AIN0 -- HV
             hv = ADCRH;
             hv <<= 4;
             hv |= (ADCRL & 0X0F);
             set_P04;
-            for(i=0; i<10; i++);
+            for(i=0; i<3; i++);
             clr_P04;
             break;
         default :
+            set_P04;
+            clr_P04;
             ev = ADCRH;
             ev <<= 4;
             ev |= (ADCRL & 0X0F);
             break;
-            /*
         case 0x01:                        // use AIN1 -- A
             ev = ADCRH;
             ev <<= 4;
@@ -259,28 +317,16 @@ void adcHandle() interrupt 11 {
             for(i=0; i<5; i++);
             clr_P04;
             break;
+    }
+
             */
-    }
-
-
-    if (hv !=0 && ev !=0 ) {  //数据取够了
-        // 判断过0点
-        // 决定是否换相，换哪个相
-        // 复位，进入下一轮过0点判断
-        if (ev > 155 ) {      // 测试某项是否采样正确，前题相应AINx短接5V
-            set_P04;
-            for(i=0; i<5; i++);
-            clr_P04;
-        }
-        hv = 0; ev = 0;
-        set_ADCEX;            // 还原为PWM0触发ADC
-        clr_ADCF;             // AD finish, ADCF set 1 automatic
-    }
-    else {                    // 取数据
         /* -----------------------------------
            | case1: 软ADCS软触发是为了--取相势      |
            | case2: 因为PWM0 触发为了---取HV       |
            --------------------------------------*/
+
+            //clr_ADCF;            // AD finish, ADCF set 1 automatic
+            /*
         if (ADCCON1 & 0X02) {    // ADCEX 第次换相后起始为：0x00－ADCS / 0x02－ PWM0
             clr_ADCEX;           // 关闭PWM0触发, 改为软触发ADC
             clr_ADCF;            // AD finish, ADCF set 1 automatic
@@ -291,8 +337,26 @@ void adcHandle() interrupt 11 {
             set_ADCEX;          // 还原为PWM0触发ADC
             clr_ADCF;             // AD finish, ADCF set 1 automatic
         }
+        */
 
+        /*
+    if (hv !=0 && ev !=0 ) {  //数据取够了
+        // 判断过0点
+        // 决定是否换相，换哪个相
+        // 复位，进入下一轮过0点判断
+        //if (ev > 155 ) {      // 测试某项是否采样正确，前题相应AINx短接5V
+    	if(0){
+            set_P04;
+            for(i=0; i<2; i++);
+            clr_P04;
+        }
+        hv = 0; ev = 0;
+        set_ADCEX;            // 还原为PWM0触发ADC
+        clr_ADCF;             // AD finish, ADCF set 1 automatic
     }
+    else {                    // 取数据
+    }
+	*/
 }
 
 /* 定义功能函数 */
