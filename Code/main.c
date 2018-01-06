@@ -1,5 +1,4 @@
 /*
-
 FOR BLDC 2017
 --Pin configure--
 HA   P12
@@ -28,6 +27,18 @@ HV   P17 AIN0
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
 #define PWMOUT 30 			//预定位（proLoc）占空比
 #define PWMOUT2 50 			//启动（）占空比
+                        // 
+
+/* ------------------------------------
+  选择悬空绕组对应的高管PWM信号源
+   ETGSEL1 ETGSEL0
+   00 = PWM0.
+   01 = PWM2.
+   10 = PWM4.
+-----------------------------------*/
+#define PWM0_ETGSEL_EN clr_ETGSEL1; clr_ETGSEL0;
+#define PWM2_ETGSEL_EN clr_ETGSEL1; set_ETGSEL0;
+#define PWM4_ETGSEL_EN set_ETGSEL1; clr_ETGSEL0;
 
 /*
 #define DOWN_A_ON set_P00			// this for high level avalable
@@ -59,91 +70,89 @@ const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
 /* ---------- 定义函数 --------------*/
 // 系统时钟配置: 内部16M
 void clkConf(){
-	set_HIRCEN; 		// sysClk = 16M
+	  set_HIRCEN; 		// sysClk = 16M
 }
 
 void ioConf(){
-	PWM_GP_MODE_ENABLE;		// use group mode
-	PWM0_P12_OUTPUT_ENABLE; 	// upA
-	PWM4_P01_OUTPUT_ENABLE; 	// upB
-	PWM2_P10_OUTPUT_ENABLE; 	// upC
+    PWM_GP_MODE_ENABLE;		// use group mode
+    PWM0_P12_OUTPUT_ENABLE; 	// upA
+    PWM4_P01_OUTPUT_ENABLE; 	// upB
+    PWM2_P10_OUTPUT_ENABLE; 	// upC
 
-	P00_PushPull_Mode; 			//downA
-	P11_PushPull_Mode; 			// downB
-	P03_PushPull_Mode; 			// downC
+    P00_PushPull_Mode; 			//downA
+    P11_PushPull_Mode; 			// downB
+    P03_PushPull_Mode; 			// downC
 
-	P04_PushPull_Mode; 			// for test referrence 
+    P04_PushPull_Mode; 			// for test referrence 
 }
 
 void pwmConf(){
-	set_CLRPWM;     		// clrear pwm counter //PWM_CLOCK_DIV_8;	// sysClk / 8 for pwm
-	PWM_GP_MODE_ENABLE;		// use group mode
-	PWMPH = (unsigned char) (pwm >> 8);  // set pwm frequnce	
-	PWMPL = (unsigned char) pwm; 
-	/* 上管高电平有效，平时不动作为低电平 */
-	PMD = 0X00;				//(PWM掩码数据) wen masked, 00: ground / FF: vcc (note: upFET-off)
-	PWM_OUTPUT_ALL_NORMAL;	//(占空输出的极性) set on_duty is [default]hight:low ( [default]NORMAL: INVERSE )
+    set_CLRPWM;     		// clrear pwm counter //PWM_CLOCK_DIV_8;	// sysClk / 8 for pwm
+    PWM_GP_MODE_ENABLE;		// use group mode
+    PWMPH = (unsigned char) (pwm >> 8);  // set pwm frequnce	
+    PWMPL = (unsigned char) pwm; 
+    /* 上管高电平有效，平时不动作为低电平 */
+    PMD = 0X00;				//(PWM掩码数据) wen masked, 00: ground / FF: vcc (note: upFET-off)
+    PWM_OUTPUT_ALL_NORMAL;	//(占空输出的极性) set on_duty is [default]hight:low ( [default]NORMAL: INVERSE )
 }
 
 void pwmStart(){
-	//set_EPWM;    			//Enable PWM interrupt
-	set_LOAD;         // load PWM duty from buffer
-	set_PWMRUN;
+    //set_EPWM;    			//Enable PWM interrupt
+    set_LOAD;         // load PWM duty from buffer
+    set_PWMRUN;
 }
 
 void pwmStop(){
-	clr_EPWM;    			//Enable PWM interrupt
-	clr_PWMRUN;
+    clr_EPWM;    			//Enable PWM interrupt
+    clr_PWMRUN;
 }
 
 void setDuty(){
-	PWM0H =(unsigned char) (duty >> 8);    // set duty 
-	PWM0L =(unsigned char) duty; 
-	//while( !(LOAD == 0X00) );				// whait LOAD reset 0 by self
-	set_LOAD;
+    PWM0H =(unsigned char) (duty >> 8);    // set duty 
+    PWM0L =(unsigned char) duty; 
+    //while( !(LOAD == 0X00) );				// whait LOAD reset 0 by self
+    set_LOAD;
 }
 
-//void setCommutation(unsigned char workstep, unsigned int dutyv){
 void setCommutation(unsigned char workstep){
-	//PMEN = 0xFF;				// pwm output all off
-
-	if(workstep!=3&&workstep!=4)
-	    DOWN_A_OFF;
-	if(workstep!=0&&workstep!=5)
-	    DOWN_B_OFF;
-	if(workstep!=1&&workstep!=2)
-	    DOWN_C_OFF;
-
-	setDuty();
-
-	if(workstep==0) {			      //AB
-		DOWN_B_ON;
-	}
-  else if(workstep==1) {		 //AC
-	  	DOWN_C_ON;
-	}
-	else if(workstep==2) {			//BC
-	  	DOWN_C_ON;
-	}
-	else if(workstep==3) {			//BA
-	  	DOWN_A_ON;
-	}
-	else if(workstep==4) {  		//CA
-	  	DOWN_A_ON;
-	}
-	else if(workstep==5) {			//CB
-	  	DOWN_B_ON;
-	}
-	
-	PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
+    if ( workstep != 3 && workstep != 4)
+        DOWN_A_OFF;
+    if ( workstep != 0 && workstep != 5)
+        DOWN_B_OFF;
+    if ( workstep != 1 && workstep != 2)
+        DOWN_C_OFF;
+    setDuty();
+    /* ----------------------------------------------
+       | AB AC BC BA CA CB    no work:   !a   !b   !c  |
+       | 0   1  2  3  4  5       step:   2 5  1 4  0 3 |
+       |                       PWM上管：  B C  A C  A B |
+       |                       ex_PWM:   4 2  0 2  0 4 |
+       -----------------------------------------------*/
+      // (for ADC:选择悬空绕组; 及其对应的高管PWM信号源)
+      // (for commuation: 开启下管)
+    switch (workstep) { 
+        case 0:                            // AB
+            DOWN_B_ON; PWM0_ETGSEL_EN; Enable_ADC_AIN3; break;
+        case 1:                            // AC
+            DOWN_C_ON; PWM0_ETGSEL_EN; Enable_ADC_AIN2; break;
+        case 2:                            // BC
+            DOWN_C_ON; PWM4_ETGSEL_EN; Enable_ADC_AIN1; break;
+        case 3:                            // BA
+            DOWN_A_ON; PWM4_ETGSEL_EN; Enable_ADC_AIN3; break;
+        case 4:                            // CA
+            DOWN_A_ON; PWM2_ETGSEL_EN; Enable_ADC_AIN2; break;
+        case 5:                            // CB
+            DOWN_B_ON; PWM2_ETGSEL_EN; Enable_ADC_AIN1; break;
+    }
+    PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
 }
 
 void preLoc(){
-	workstep = 5;		
-	duty=pwm*PWMOUT/100;      	// duty cicy(location stage)
-	duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
-	//setDuty();
-	setCommutation(workstep);
+    workstep = 5;		
+    duty=pwm*PWMOUT/100;      	// duty cicy(location stage)
+    duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
+    //setDuty();
+    setCommutation(workstep);
 }
 
 unsigned char  bldcStart(){
@@ -192,8 +201,8 @@ void keepUpAllOff(){
 void adcConf(){
 	ADCCON0 = 0X00;	 // ETGSEL =00  外部触发源选择:PWM0 
  	ADCCON1 = 0X03;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 1;
-	clr_ADCF;        // AD finish, ADCF set 1 automatic, and clear by manue
- }
+	                 // AD finish, ADCF set 1 automatic, and clear by manual
+}
 
 /* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
@@ -202,23 +211,6 @@ void adcHandle() interrupt 11 {
             set_P04;
             for(i=0; i<10; i++);
             clr_P04;
-
-            /* --------------------------------------
-            | AB AC BC BA CA CB       !a   !b   !c  |
-            | 0   1  2  3  4  5       2 5  1 4  0 3 |
-            ---------------------------------------*/
-            switch (workstep) {                // 选择悬空绕组
-                case 2:
-                case 5:
-                    Enable_ADC_AIN1; break;
-                case 1:
-                case 4:
-                    Enable_ADC_AIN2; break;
-                case 0:
-                case 3:
-                    Enable_ADC_AIN3; break;
-            }
-
             break;
         case 0x01:                        // use AIN1 -- A
             set_P04;
@@ -237,18 +229,18 @@ void adcHandle() interrupt 11 {
             break;
     }
 
-    /* --------------------------------------
-       | 因为PWM0 触发为了取HV
-       | 软ADCS软触发是为了取相势
-       ---------------------------------------*/
-    if (ADCCON1 & 0X02) {   // ADCEX 当前用的触发源：０－ADCS / 1－ PWM0
-        clr_ADCEX;          // 关闭PWM0触发
-        clr_ADCF;             // AD finish, ADCF set 1 automatic
-        set_ADCS;            // 开始取相势
+       /* -----------------------------------
+       | case1: 软ADCS软触发是为了--取相势      |
+       | case2: 因为PWM0 触发为了---取HV       |
+       --------------------------------------*/
+    if (ADCCON1 & 0X02) {    // ADCEX 第次换相后起始为：0x00－ADCS / 0x02－ PWM0
+        clr_ADCEX;           // 关闭PWM0触发, 改为软触发ADC
+        clr_ADCF;            // AD finish, ADCF set 1 automatic
+        Enable_ADC_AIN0;     // HV sense
+        set_ADCS;            // 再次触发本中断，取HV
     }
     else {
-        set_ADCEX;          // 开启PWM0触发
-        Enable_ADC_AIN0;
+        set_ADCEX;          // 还原为PWM0触发ADC
         clr_ADCF;             // AD finish, ADCF set 1 automatic
     }
 }
