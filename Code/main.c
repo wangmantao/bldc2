@@ -30,7 +30,7 @@ HV   P17 AIN0
                         // 
 
 /* ------------------------------------
-  选择悬空绕组对应的高管PWM信号源
+   给ADC触发的PWM信号源，用于悬空绕组测量时，可以用其它未空绕组的PWM信号
    ETGSEL1 ETGSEL0
    00 = PWM0.
    01 = PWM2.
@@ -60,8 +60,10 @@ HV   P17 AIN0
 static unsigned char i = 0;
 static unsigned char startOk = 0;
 static unsigned char workstep = 0;
-static	unsigned int actCount = 0;
-static	unsigned int change_delay = 50;
+static unsigned int actCount = 0;
+static unsigned int change_delay = 50;
+static unsigned int hv = 0;
+static unsigned int ev = 0;
 // PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
@@ -212,80 +214,111 @@ void keepUpAllOff(){
 
 void adcConf(){
 	ADCCON0 = 0X00;	 // ETGSEL =00  外部触发源选择:PWM0 
- 	ADCCON1 = 0X03;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 1;
+ 	ADCCON1 = 0X02;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 0;
 	                 // AD finish, ADCF set 1 automatic, and clear by manual
 }
 
 /* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
-	unsigned char AA = ADCRH;
-	unsigned char BB = ADCRL;
-	ADCMPH = 0x33;
-	ADCMPL = 0x44;
-	AA = ADCMPH;
-	BB = ADCMPL;
     switch (ADCCON0 & 0X0F) {              // 取ADCHS(采样通道选择值)
         case 0x00:                         // use AIN0 -- HV
+            hv = ADCRH;
+            hv <<= 4;
+            hv |= (ADCRL & 0X0F);
             set_P04;
             for(i=0; i<10; i++);
             clr_P04;
             break;
+        default :
+            ev = ADCRH;
+            ev <<= 4;
+            ev |= (ADCRL & 0X0F);
+            break;
+            /*
         case 0x01:                        // use AIN1 -- A
+            ev = ADCRH;
+            ev <<= 4;
+            ev |= (ADCRL & 0X0F);
             set_P04;
             for(i=0; i<5; i++);
             clr_P04;
             break;
         case 0x02:                        // use AIN2 -- B
+            ev = ADCRH;
+            ev <<= 4;
+            ev |= (ADCRL & 0X0F);
             set_P04;
             for(i=0; i<5; i++);
             clr_P04;
             break;
         case 0x03:                        // use AIN3 -- C
+            ev = ADCRH;
+            ev <<= 4;
+            ev |= (ADCRL & 0X0F);
             set_P04;
             for(i=0; i<5; i++);
             clr_P04;
             break;
+            */
     }
 
-       /* -----------------------------------
-       | case1: 软ADCS软触发是为了--取相势      |
-       | case2: 因为PWM0 触发为了---取HV       |
-       --------------------------------------*/
-    if (ADCCON1 & 0X02) {    // ADCEX 第次换相后起始为：0x00－ADCS / 0x02－ PWM0
-        clr_ADCEX;           // 关闭PWM0触发, 改为软触发ADC
-        clr_ADCF;            // AD finish, ADCF set 1 automatic
-        Enable_ADC_AIN0;     // HV sense
-        set_ADCS;            // 再次触发本中断，取HV
-    }
-    else {
-        set_ADCEX;          // 还原为PWM0触发ADC
+
+    if (hv !=0 && ev !=0 ) {  //数据取够了
+        // 判断过0点
+        // 决定是否换相，换哪个相
+        // 复位，进入下一轮过0点判断
+        if (ev > 155 ) {      // 测试某项是否采样正确，前题相应AINx短接5V
+            set_P04;
+            for(i=0; i<5; i++);
+            clr_P04;
+        }
+        hv = 0; ev = 0;
+        set_ADCEX;            // 还原为PWM0触发ADC
         clr_ADCF;             // AD finish, ADCF set 1 automatic
+    }
+    else {                    // 取数据
+        /* -----------------------------------
+           | case1: 软ADCS软触发是为了--取相势      |
+           | case2: 因为PWM0 触发为了---取HV       |
+           --------------------------------------*/
+        if (ADCCON1 & 0X02) {    // ADCEX 第次换相后起始为：0x00－ADCS / 0x02－ PWM0
+            clr_ADCEX;           // 关闭PWM0触发, 改为软触发ADC
+            clr_ADCF;            // AD finish, ADCF set 1 automatic
+            Enable_ADC_AIN0;     // HV sense （当前是PWM0触发的，测了ev; 接着改为软触发，测hv.)
+            set_ADCS;            // 再次触发本中断，取HV
+        }
+        else {
+            set_ADCEX;          // 还原为PWM0触发ADC
+            clr_ADCF;             // AD finish, ADCF set 1 automatic
+        }
+
     }
 }
 
 /* 定义功能函数 */
 void main(){
-	Set_All_GPIO_Quasi_Mode;
-	IE = 0XC0;           // Enable all interrupt (p194, 中断向量表）
-  	clr_P04;
-  	set_ADCMPEN;
-	keepAllOff();
-	clkConf();
-	ioConf();
-	adcConf();
-	pwmConf();
-	Timer0_Delay1ms(50);
-	preLoc();			
-	pwmStart();
-	Timer0_Delay1ms(500);		// preLocation delay 
-	//pwmStop();
-	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty cicy(location stage)
-	setDuty(); //pwmStart();
-	if(bldcStart() == 0){
-		//keepAllOff();
-		keepUpAllOff();
-		while(1);		// no started to stop all
-	}	
-	while (1){
-	}
+    Set_All_GPIO_Quasi_Mode;
+    IE = 0XC0;           // Enable all interrupt (p194, 中断向量表）
+    clr_P04;
+    keepAllOff();
+
+    clkConf();
+    ioConf();
+    adcConf();
+    pwmConf();
+    Timer0_Delay1ms(50);  // waiting
+
+    preLoc();
+    pwmStart();
+    Timer0_Delay1ms(500);		// preLocation delay
+
+    duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty for start
+    setDuty();
+    set_ADCEN;              //preLoc 后开启ADC
+    if(bldcStart() == 0){
+        keepUpAllOff();
+        while(1);		// no started to stop all
+    }	
+    while (1){
+    }
 }
