@@ -9,7 +9,7 @@
   LB   P11
   LC   P03
 
-  EA   P30 AIN1
+  EA   P30 AIN1 -> P05 AIN4
   EB   P07 AIN2
   EC   P06 AIN3
   HV   P17 AIN0
@@ -24,9 +24,9 @@
 
 /* ---------- 定义常量 --------------*/
 #define STM8_FREQ_MHZ 16 
-#define PWM_FREQUENCY 5000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
+#define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
 #define PWMOUT 30 			//预定位（proLoc）占空比
-#define PWMOUT2 50 			//启动（）占空比
+#define PWMOUT2 20 			//启动（）占空比
                         // 
 
 /* ------------------------------------
@@ -70,9 +70,11 @@ static unsigned char zCount = 0;
 static unsigned int zzTime[3] = {0,0,0};
 // PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
+static unsigned char StepZok= 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
 static const unsigned long pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) ); 
 const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
+const unsigned char ST_MARK[6]={0x01, 0x02, 0x04, 0x08, 0x10, 0x20}; // [x x s5 s4 s3 s2 s1]
 /* ---------- 定义函数 --------------*/
 // 系统时钟配置: 内部16M
 void clkConf(){
@@ -89,14 +91,19 @@ void ioConf(){
   P11_PushPull_Mode; 			// downB
   P03_PushPull_Mode; 			// downC
 
+  /*
+  P30_Input_Mode;
+  clr_P30DIDS;
+	*/
+  P05_Input_Mode;
+  clr_P05DIDS; 
   P06_Input_Mode;
   clr_P06DIDS;
   P07_Input_Mode;
   clr_P07DIDS;
   P06_Input_Mode;
   clr_P06DIDS; 
-  P30_Input_Mode;
-  clr_P30DIDS;
+
   P17_Input_Mode;
   clr_P17DIDS;
 
@@ -158,7 +165,7 @@ void setCommutation(){
     break;
   case 2:                            // BC
     DOWN_C_ON; PWM4_ETGSEL_EN; 
-    Enable_ADC_AIN1; 
+    Enable_ADC_AIN4; 
     break;
   case 3:                            // BA
     DOWN_A_ON; PWM4_ETGSEL_EN; 
@@ -170,20 +177,43 @@ void setCommutation(){
     break;
   case 5:                            // CB
     DOWN_B_ON; PWM2_ETGSEL_EN; 
-    Enable_ADC_AIN1; 
+    Enable_ADC_AIN4; 
     break;
   }
   PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
 }
 
 void preLoc(){
-  workstep = 5;
+  workstep =5;
   duty=pwm*PWMOUT/100;      	// duty cicy(location stage)
   duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
-  //setDuty();
+  setDuty();
   setCommutation();
 }
 
+unsigned char  bldcStart2(){
+	unsigned int timerT = 300, i2;
+	while (1) {
+		workstep++;
+		if(workstep >=6 ) workstep = 0;
+		setCommutation();
+		// 延迟，以50uS为一单位，延迟timer个单位
+		for(i2=0; i2<timerT; i2++){
+			//Timer2_Delay500us(1);
+		    //Timer3_Delay10us(5);
+			for(i=0; i<190; i++);
+		}
+		timerT -=  timerT/15+1;
+		if (timerT < 25) return 0;
+		/*
+		if(timerT>25){
+			timerT -=  timerT/15+1;
+		}
+		else
+			timerT = 25;
+		*/
+	}
+}
 unsigned char  bldcStart(){
 	actCount = 0;
 	startOk = 0;
@@ -193,12 +223,12 @@ unsigned char  bldcStart(){
     zCount =0;
 		setCommutation();	
 		switch (actCount){
-    case 24: change_delay = 80;
+    case 24: change_delay = 100;
 			break;
 
-      /*
     case 48: change_delay = 80;
 			break;
+      /*
 
     case 52: change_delay = 60;
       	break;
@@ -249,7 +279,7 @@ void reAIN(){
     Enable_ADC_AIN2; 
     break;
   case 2:                            // BC
-    Enable_ADC_AIN1; 
+    Enable_ADC_AIN4; 
     break;
   case 3:                            // BA
     Enable_ADC_AIN3; 
@@ -258,7 +288,7 @@ void reAIN(){
     Enable_ADC_AIN2; 
     break;
   case 5:                            // CB
-    Enable_ADC_AIN1; 
+    Enable_ADC_AIN4; 
     break;
   }
 }
@@ -268,23 +298,33 @@ void reAIN(){
 void commDelay() interrupt 3 {
   clr_TR1;
   clr_P04;      // 表示执行了换相
+  	if (actCount=200)
+  	{
+  		startOk;
+  	}
+  	workstep++; 
+	if(workstep >=6 ) workstep = 0;
+	setCommutation();
 }
 
 /* 执行两次ADC中断 */
 void adcHandle() interrupt 11 {
-  unsigned int cv = 0; // count value
-	if (adchv == 1){	                      //AIN0  2end interrupt
+  	unsigned int cv = 0; // count value
+	if (StepZok == ST_MARK[workstep]){
+		clr_ADCF;	
+		return;
+	 }    //该step 标记是否已有过0点
+	if (adchv == 1 ){	                      //AIN0  2end interrupt
 	    hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F); hv = hv/2;
 	    if( (hv>800)  && (ev > hv*0.99) && (ev < hv*1.01)){ // for cross 0 point constantly
 		    zCount ++;
-		    if ( ( zCount >=1) ){ // && (workstep != laststep) ){                  // cross avalble, write the time of tow 0 pint At zzTime[2]
-		    	set_P04;
+		    if ( ( zCount >3)   ){ // && (workstep = laststep) ){                  // cross avalble, write the time of tow 0 pint At zzTime[2]
+		    	//P04=~P04;
 		        zCount = 0; 
-		        /*
+		        StepZok = ST_MARK[workstep];
+
 		        clr_TR0;            // reset cross 0 counter & stop timer
-		        if ((workstep == (laststep + 1)) || ((workstep ==0) && (laststep == 5)) ){  //  有效的过0间隔
-		          cv = TH0; cv <<= 8; cv |= TL0;  zzTime[2] = cv;  // get timer value
-		        }
+		        cv = TH0; cv <<= 8; cv |= TL0;  zzTime[2] = cv;  // get timer value
 
 		        if ((zzTime[2] != 0) && (TR1 == 0)){                 // 开启延时换相
 		          cv = 0xFFFF - (zzTime[2]/2);                // set timer1 preValue
@@ -294,9 +334,7 @@ void adcHandle() interrupt 11 {
 
 		        TH0 = 0X00; TL0 = 0X00;
 		        set_TR0;  // reset timer0 & restart it
-				*/
 	    	}
-	    	laststep = workstep;
 	    }
 
 	    reAIN();    // 重新启用下相电动势检测
@@ -305,8 +343,7 @@ void adcHandle() interrupt 11 {
 
 	}
 	else{                                 // AINx 1st interrupt (相电势)
-	  	clr_P04;
-	    ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
+		ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
 	    Enable_ADC_AIN0;
 	    adchv = 1;
 	    clr_ADCF; set_ADCS;
@@ -337,17 +374,20 @@ void main(){
   pwmStart();
   Timer2_Delay500us(1000);
 
-  //IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
- IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
-
+ // IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+ //IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
   duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty for start
   setDuty();
   set_ADCEN;              //preLoc 后开启ADC
-  if(bldcStart() == 0){
+  bldcStart2();
+  IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+  /*
+  if(bldcStart2() == 0){
     keepUpAllOff();
     set_P04;
     while(1);		// no started to stop all
   }	
+	*/
   while (1){
   }
 }
