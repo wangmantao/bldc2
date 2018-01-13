@@ -25,8 +25,8 @@
 /* ---------- 定义常量 --------------*/
 #define STM8_FREQ_MHZ 16 
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
-#define PWMOUT 30 			//预定位（proLoc）占空比
-#define PWMOUT2 20 			//启动（）占空比
+#define PWMOUT 15 			//预定位（proLoc）占空比
+#define PWMOUT2 20  			//启动（）占空比
 // 
 
 /* ------------------------------------
@@ -99,7 +99,7 @@ void ioConf(){
 	P05_Input_Mode;		// AIN4 A
 	clr_P05DIDS; 
 
-	P06_Input_Mode;	很多人不理解为什么 Emacs 的用户那么多，他们是如此的热爱Emacs，甚至有的人把它当成了“信仰”。虽然我没有这个信仰，但是它的确很好，我很喜欢	// AIN1 B
+	P06_Input_Mode;	// AIN1 B
 	clr_P06DIDS;
 
 	P07_Input_Mode;		// AIN2 C
@@ -159,6 +159,7 @@ void setCommutation(){
 		case 0:                            // AB
 			DOWN_B_ON; PWM0_ETGSEL_EN; 
 			Enable_ADC_AIN3; 
+			set_P04;
 			break;
 		case 1:                            // AC
 			DOWN_C_ON; PWM0_ETGSEL_EN; 
@@ -179,6 +180,7 @@ void setCommutation(){
 		case 5:                            // CB
 			DOWN_B_ON; PWM2_ETGSEL_EN; 
 			Enable_ADC_AIN4; 
+			clr_P04;
 			break;
 	}
 	PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
@@ -206,13 +208,11 @@ unsigned char  bldcStart2(){
 		}
 		timerT -=  timerT/15+1;
 		if (timerT < 25) return 0;
-		/*
+	/*
 		   if(timerT>25){
-		   timerT -=  timerT/15+1;
+		      timerT -=  timerT/15+1;
 		   }
-		   else
-		   timerT = 25;
-		   */
+*/
 	}
 }
 
@@ -262,6 +262,7 @@ void adcConf(){
 	ADCCON1 = 0X02;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 0;
 	// AD finish, ADCF set 1 automatic, and clear by manually
 	//adc 比较器
+	ADCDLY = 0X05;
 	set_ADCS;        // 启动ADC转换
 	//ADCCON2 = 0x20;	// 7.ADFBEN(break) 6.ADCMPOP(ADCR>=ADCOMP->1) 5.ADCMPEN 4.ADCMPO(转换结果)
 }
@@ -308,6 +309,41 @@ void reAIN(){
 
 /* 中断－ADC转换完成 [一直使能]  */
 void adcHandle() interrupt 11 {
+
+	ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
+	switch (workstep) {
+		case 0: case 2: case 4:   // 反电势下降
+			if(ev == 0 )    // 80 = 0.1V
+				zCount ++;
+			//else
+				//zCount = 0;
+		break;
+		case 1: case 3: case 5:   // 反电势上升
+			if(ev > 80 )    // 80 = 0.1V
+				zCount ++;
+			else
+				zCount = 0;
+		break;
+	}
+	/*
+	if ( actCount == 200)
+	{
+			duty =(unsigned int)(pwm*50/100);      	// duty for start
+			setDuty();
+	}
+	*/
+    if (zCount > 30) {
+		workstep++;
+		if(workstep >=6 ) workstep = 0;
+		setCommutation();
+    	P04=~P04;
+		zCount = 0;
+		//actCount++;
+    }
+
+	clr_ADCF; set_ADCS;
+	/*
+	set_P04;	
 	if (adchv == 0 ){	                      //AIN0  2end interrupt
 		ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
 		Enable_ADC_AIN0;
@@ -320,13 +356,18 @@ void adcHandle() interrupt 11 {
 		adchv = 0;
 		clr_ADCF;
 		// 比较两个电压，控制换相
-    if (hv > ev) {
-        workstep++;
-        if(workstep >=6 ) workstep = 0;
-        setCommutation();
-        set_P04；
-    }
+		if(hv < ev )
+			zCount ++;
+		else
+			zCount = 0;
+	    if (zCount > 10) {
+			workstep++;
+			if(workstep >=6 ) workstep = 0;
+			setCommutation();
+			zCount = 0;
+	    }
 	}
+	*/
 }
 
 
@@ -381,7 +422,6 @@ void countConf(){
 	TIMER1_MODE1_ENABLE;		// 16位定时器
 	// 读写TH0,TL0时，要clr_TR0
 }
-
 void main(){
 	/*开机*/
 	Set_All_GPIO_Quasi_Mode;
@@ -401,18 +441,23 @@ void main(){
 	pwmStart();
 	Timer2_Delay500us(1000);
 
-	// IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
-	//IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+
 
 	/*启动*/
 	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty for start
 	setDuty();
 	set_ADCEN;              //preLoc 后开启ADC
 	bldcStart2();
-
+	clr_P04;
+		workstep++;
+		if(workstep >=6 ) workstep = 0;
+		setCommutation();	
 	/*使能比较中断进入自换相*/
-	IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+	// IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+	IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
 
+	duty =(unsigned int)(pwm*80/100);      	// duty for start
+	setDuty();
 	/*
 	   if(bldcStart2() == 0){
 	   keepUpAllOff();
