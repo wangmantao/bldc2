@@ -6,13 +6,16 @@
    HC   P10
 
    LA   P00
-   LB   P11
+   LB   (P11)  --> P13 (原P11要做为CS电流检测)
    LC   P03
 
    EA   P30 AIN1 -> P05 AIN4
    EB   P07 AIN2
    EC   P06 AIN3
-   HV   P17 AIN0
+   HV   (P17 AIN0) -> P30 AIN1
+   MV   P17 AIN0
+   CS   P11 AIN7
+   SC   P04 AIN5
 
 */
 
@@ -25,8 +28,7 @@
 /* ---------- 定义常量 --------------*/
 #define STM8_FREQ_MHZ 16 
 #define PWM_FREQUENCY 16000 		//PWM频率16K, 将被计算出pwm值,写入PWMPH/L
-#define PWMOUT 15 			//预定位（proLoc）占空比
-#define PWMOUT2 20  			//启动（）占空比
+//#define PWMOUT 15 			//预定位（proLoc）占空比
 // 
 
 /* ------------------------------------
@@ -57,24 +59,28 @@
 #define DOWN_C_OFF set_P03
 
 /* ------- 定义变量 --------------*/
+static bit joSwitch = 0;			// 奇偶开关，偶取中点电压（先），奇取端电压
+static char started = 0;            // 0  启动前
 static unsigned char i = 0;
 static unsigned char startOk = 0;
 static unsigned char workstep = 0;
-static unsigned char laststep = 9;
 static unsigned int actCount = 0;
-static unsigned int change_delay = 50;
-static unsigned int hv = 0;
-static unsigned int ev = 0;
-static unsigned char adchv = 0;
+static unsigned int hv = 0;     // 中点电压
+static unsigned int ev = 0;     // 悬空端电压
+static unsigned int cv = 0;     // 过0时间统计值
+static unsigned int cv1 = 0;     // 过0时间统计值
+static unsigned int cv2 = 0;     // 过0时间统计值
 static unsigned char zCount = 0;
-static unsigned int zzTime[3] = {0,0,0};
+static unsigned char PWMOUT2 = 20;              //启动（）占空比
+static unsigned char PWMOUT = 20;              //启动（）占空比
+static unsigned int up =0;
+static unsigned int down = 0;
 // PWM 占空比的寄存器值 （PWM0H/PWML)
 static unsigned int duty = 0;
-static unsigned char StepZok= 0;
+static unsigned char setComCount = 0;
 // PWM 频率的寄存器值 （PWMPH/PWMPL)
 static const unsigned long pwm = ((unsigned int)((STM8_FREQ_MHZ * (unsigned long)1000000)/PWM_FREQUENCY) ); 
 const unsigned char PWM_MARSK_TABLE[6]={0x01, 0x01, 0x10, 0x10, 0x04, 0x04};
-const unsigned char ST_MARK[6]={0x01, 0x02, 0x04, 0x08, 0x10, 0x20}; // [x x s5 s4 s3 s2 s1]
 
 
 // 系统时钟配置: 内部16M
@@ -133,20 +139,35 @@ void pwmStop(){
 }
 
 void setDuty(){
-	PWM0H =(unsigned char) (duty >> 8);    // set duty 
-	PWM0L =(unsigned char) duty; 
-	//while( !(LOAD == 0X00) );				// whait LOAD reset 0 by self
-	set_LOAD;
+    if (PWMOUT2 > PWMOUT && started == 1) {
+        if(PWMOUT == PWMOUT2) started =3;   // let setCommuation 不在setDuty
+        if(setComCount >= 4){
+            PWMOUT++;
+            setComCount = 0;
+        }
+        duty =(unsigned int)(pwm*PWMOUT/100);          // duty for start
+        PWM0H =(unsigned char) (duty >> 8);    // set duty 
+        PWM0L =(unsigned char) duty; 
+        set_LOAD;
+    }
+    else {
+        duty =(unsigned int)(pwm*PWMOUT2/100);          // duty for start
+    	PWM0H =(unsigned char) (duty >> 8);    // set duty 
+    	PWM0L =(unsigned char) duty; 
+    	set_LOAD;
+    }
 }
 
 void setCommutation(){
+    setComCount ++;
+	joSwitch = 0; Enable_ADC_AIN0;  //第次换相以取中点电压为最先
 	if ( workstep != 3 && workstep != 4)
 		DOWN_A_OFF;
 	if ( workstep != 0 && workstep != 5)
 		DOWN_B_OFF;
 	if ( workstep != 1 && workstep != 2)
 		DOWN_C_OFF;
-	setDuty();
+	if (started == 1 ) setDuty();   // 启动之后，加速之前
 	/* ----------------------------------------------
 	   | AB AC BC BA CA CB    no work:   !a   !b   !c  |
 	   | 0   1  2  3  4  5       step:   2 5  1 4  0 3 |
@@ -158,29 +179,27 @@ void setCommutation(){
 	switch (workstep) { 
 		case 0:                            // AB
 			DOWN_B_ON; PWM0_ETGSEL_EN; 
-			Enable_ADC_AIN3; 
-			set_P04;
+			//Enable_ADC_AIN3; 
 			break;
 		case 1:                            // AC
 			DOWN_C_ON; PWM0_ETGSEL_EN; 
-			Enable_ADC_AIN2; 
+			//Enable_ADC_AIN2; 
 			break;
 		case 2:                            // BC
 			DOWN_C_ON; PWM4_ETGSEL_EN; 
-			Enable_ADC_AIN4; 
+			//Enable_ADC_AIN4; 
 			break;
 		case 3:                            // BA
 			DOWN_A_ON; PWM4_ETGSEL_EN; 
-			Enable_ADC_AIN3; 
+			//Enable_ADC_AIN3; 
 			break;
 		case 4:                            // CA
 			DOWN_A_ON; PWM2_ETGSEL_EN; 
-			Enable_ADC_AIN2; 
+			//Enable_ADC_AIN2; 
 			break;
 		case 5:                            // CB
 			DOWN_B_ON; PWM2_ETGSEL_EN; 
-			Enable_ADC_AIN4; 
-			clr_P04;
+			//Enable_ADC_AIN4; 
 			break;
 	}
 	PMEN = ~ (PWM_MARSK_TABLE[workstep]);	// one chanel pwm open
@@ -188,23 +207,21 @@ void setCommutation(){
 
 void preLoc(){
 	workstep =5;
-	duty=pwm*PWMOUT/100;      	// duty cicy(location stage)
-	duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
+	//duty =(unsigned int) (pwm*PWMOUT/100);      	// duty cicy(location stage)
+    PWMOUT2 = 20;
 	setDuty();
 	setCommutation();
 }
 
 unsigned char  bldcStart2(){
-	unsigned int timerT = 300, i2;
+	unsigned int timerT = 300, i2, i3;
 	while (1) {
 		workstep++;
 		if(workstep >=6 ) workstep = 0;
 		setCommutation();
 		// 延迟，以50uS为一单位，延迟timer个单位
 		for(i2=0; i2<timerT; i2++){
-			//Timer2_Delay500us(1);
-			//Timer3_Delay10us(5);
-			for(i=0; i<190; i++);
+			for(i3=0; i3<280; i3++);
 		}
 		timerT -=  timerT/15+1;
 		if (timerT < 25) return 0;
@@ -246,13 +263,13 @@ unsigned char  bldcStart2(){
 
 void keepAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
-	duty = 0x00; setDuty(); 	// keep low for PWM mode start
+	PWMOUT2 = 0; setDuty(); 	// keep low for PWM mode start
 	DOWN_A_OFF; DOWN_B_OFF; DOWN_C_OFF;
 }
 
 void keepUpAllOff(){
 	clr_P12; clr_P01; clr_P10; 	// upA  upB  upC OFF
-	duty = 0x00; setDuty(); 	// keep low for PWM mode start
+	PWMOUT2 = 0; setDuty(); 	// keep low for PWM mode start
 	DOWN_A_ON; DOWN_B_ON; DOWN_C_ON;
 }
 
@@ -262,11 +279,14 @@ void adcConf(){
 	ADCCON1 = 0X02;  // ETGTYP = 00 falling; ADCEX = 1; ADCEN = 0;
 	// AD finish, ADCF set 1 automatic, and clear by manually
 	//adc 比较器
-	ADCDLY = 0X05;
+	ADCDLY = 0X00;
 	set_ADCS;        // 启动ADC转换
 	//ADCCON2 = 0x20;	// 7.ADFBEN(break) 6.ADCMPOP(ADCR>=ADCOMP->1) 5.ADCMPEN 4.ADCMPO(转换结果)
 }
 
+/*
+由workstep确定去取对应的相端悬空电压
+*/
 void reAIN(){
 	switch (workstep){
 		case 0:	                  // AB
@@ -291,24 +311,87 @@ void reAIN(){
 }
 
 // 定时1器溢出，用于换相延迟
-/*
-   void commDelay() interrupt 3 {
-   clr_TR1;
-   clr_P04;      // 表示执行了换相
-   if (actCount=200)
-   {
-   startOk;
-   }
-   workstep++; 
-   if(workstep >=6 ) workstep = 0;
-   setCommutation();
-   }
-   */
-
-
+void commDelay() interrupt 3 {
+    //P04 = ~P04;   
+    workstep++; if(workstep >=6 ) workstep = 0;
+    setCommutation();
+    set_ADCEX;      //继续pwm触发ADC
+    clr_ADCF;      // 只有在没有过0时，才会启用ADC；当过0后，还未换相前不启用ADC
+}
 
 /* 中断－ADC转换完成 [一直使能]  */
 void adcHandle() interrupt 11 {
+
+    unsigned int t1pv = 0;                      // timer1初值
+	/* ------------ PWM ON 方案 -----*/
+	if (joSwitch == 0)		// 先测中点
+	{
+		reAIN();	// 备下一步取悬空端电压
+		hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F);  // 得中点值
+        clr_ADCF;       // 只有在没有过0时，才会启用ADC；当过0后，还未换相前不启用ADC
+	}
+	else {					// 再测悬空端点
+		Enable_ADC_AIN0; // 备下一步取中点电压
+		ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
+
+        if (PWMOUT <= 30)
+        {
+            up= hv * 1.05; down = hv * 0.95;
+        }
+        else if (PWMOUT <= 40)
+        {
+            up= hv * 1.07; down = hv * 0.93;
+        }
+        else if (PWMOUT <= 50)
+        {
+            up= hv * 1.10; down = hv * 0.90;
+        }
+        else if (PWMOUT <= 98)
+        {
+            up= hv * 1.15; down = hv * 0.85;
+        }
+		if( (ev > down) && (ev < up) ) { // 过0点有效
+            clr_ADCEX;  //过0点后暂停PWM触发ADC
+   			P04 = ~P04;	
+            // 得到过0点间的定时值
+            clr_TR0;            // 停止term0
+            cv=cv1; cv1=cv2;
+            cv2 = TH0; cv2 <<= 8; cv2 |= TL0; 
+            TH0 = 0; TL0 = 0;
+            // 用间隔时间值的一半让timer1定时换相
+            clr_TR1;            // 停止term1
+            t1pv = 0xFFFF - (cv/2);                // set timer1 preValue
+            TL1 = t1pv; TH1 = t1pv >> 8;
+            set_TR1;                        // 让timer1去换相  
+            set_TR0;                        // 继续过0计时
+
+   		}
+        else {
+            /*
+            clr_TR0;            // 停止term0
+            t1pv = TH0; t1pv <<= 8; t1pv |= TL0; 
+            if (t1pv > cv)      // 超时没有过0点
+            {
+                cv=cv1; cv1=cv2; cv2 = t1pv;
+                TH0 = 0; TL0 = 0;
+                // 用间隔时间值的一半让timer1定时换相
+                clr_TR1;            // 停止term1
+                //TCON &= 0XBF;
+                //if(cv == 0) cv = 4;
+                t1pv = 0xFFFF - (cv/2);                // set timer1 preValue
+                TL1 = t1pv; TH1 = t1pv >> 8;
+                set_TR1;                        // 让timer1去换相  
+                set_TR0;                        // 继续过0计时
+                }
+            else
+            */
+            clr_ADCF;     // 只有在没有过0时，才会启用ADC；当过0后，还未换相前不启用ADC
+        }
+	}
+	// Reset some thing
+	joSwitch = ~joSwitch;
+
+	/* --------------- PWM OFF 检测方案
 
 	ev = ADCRH; ev <<= 4; ev |= (ADCRL & 0X0F);
 	switch (workstep) {
@@ -319,20 +402,14 @@ void adcHandle() interrupt 11 {
 				//zCount = 0;
 		break;
 		case 1: case 3: case 5:   // 反电势上升
-			if(ev > 80 )    // 80 = 0.1V
+			if(ev > 80) // && (ev < 819))    // 80 = 0.1V 819= 1v
 				zCount ++;
 			else
 				zCount = 0;
 		break;
 	}
-	/*
-	if ( actCount == 200)
-	{
-			duty =(unsigned int)(pwm*50/100);      	// duty for start
-			setDuty();
-	}
-	*/
-    if (zCount > 30) {
+
+    if (zCount > 40) {
 		workstep++;
 		if(workstep >=6 ) workstep = 0;
 		setCommutation();
@@ -342,6 +419,7 @@ void adcHandle() interrupt 11 {
     }
 
 	clr_ADCF; set_ADCS;
+	--------------------------------------------*/
 	/*
 	set_P04;	
 	if (adchv == 0 ){	                      //AIN0  2end interrupt
@@ -434,7 +512,7 @@ void main(){
 	adcConf(); 		// 同时配置adc比较
 	pwmConf();
 	countConf();
-	Timer2_Delay500us(100);
+	Timer2_Delay500us(2000);
 
 	/*定位*/
 	preLoc(); 		// 内含duty设置
@@ -444,27 +522,22 @@ void main(){
 
 
 	/*启动*/
-	duty =(unsigned int)(pwm*PWMOUT2/100);      	// duty for start
+    PWMOUT2=35;
 	setDuty();
-	set_ADCEN;              //preLoc 后开启ADC
 	bldcStart2();
-	clr_P04;
-		workstep++;
-		if(workstep >=6 ) workstep = 0;
-		setCommutation();	
+    started = 1;
+    workstep++; if(workstep >=6 ) workstep = 0;
+	setCommutation();	
 	/*使能比较中断进入自换相*/
-	// IE = 0XC8;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
-	IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
+    set_ADCEN;              //preLoc 后开启ADC
+	IE = 0XCA;           // Enable EA EADC | ET1 ET0  (p194, 中断向量表）
+    set_P04;            //  启动结束，进入下一个setp BA,看C的反电势
+    //IE = 0XC8;           // Enable EA EADC ET1  (p194, 中断向量表）
+	//IE = 0XC0;           // Enable all interrupt EADC ET1 (p194, 中断向量表）
 
-	duty =(unsigned int)(pwm*80/100);      	// duty for start
-	setDuty();
-	/*
-	   if(bldcStart2() == 0){
-	   keepUpAllOff();
-	   set_P04;
-	   while(1);		// no started to stop all
-	   }	
-	   */
+	//duty =(unsigned int)(pwm*80/100);      	// duty for start
+    PWMOUT2 =95;
+ 	//setDuty();
 
 	while (1){
 	}
