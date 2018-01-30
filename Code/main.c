@@ -61,8 +61,8 @@
 static bit joSwitch = 0;			// 奇偶开关，偶取中点电压（先），奇取端电压
 static bit zOk= 0;            // 奇偶开关，偶取中点电压（先），奇取端电压
 static bit demag = 0;
-static bit dir = 0;
-static char startLevel = 0;            // 0  启动前
+static bit dir = 1;
+static char startLevel = 2;            // 0  启动前
 static unsigned int i = 0;
 static unsigned char startOk = 0;
 static unsigned char workstep = 0;
@@ -94,6 +94,7 @@ static int dError=0,Error=0;
 
 void nextStep(){
 	if (dir ==1){
+			P14=~P14;
 		workstep++;
 		if(workstep >=6 ) workstep = 0;
 	}
@@ -181,7 +182,8 @@ void ioConf(){
 	P30_Input_Mode;		// 方向转换 hv 
 	clr_P30DIDS;
 
-
+	P14_PushPull_Mode; 			// downC
+	clr_P14;
 	/*
 	   EA   P30 AIN1 -> P05 AIN4
 	   EB   P07 AIN2
@@ -357,10 +359,10 @@ void forPid() interrupt 16 {
 // 定时1器溢出，用于换相延迟
 void forCommuation() interrupt 3 {
 	//workstep++; if(workstep >=6 ) workstep = 0;
-	nextStep();
-	setCommutation();
-	set_ADCEX;      //继续pwm触发ADC
-	clr_ADCF;      // 只有在没有过0时，才会启用ADC；当过0后，还未换相前不启用ADC
+	//nextStep();
+	//setCommutation();
+	//set_ADCEX;      //继续pwm触发ADC
+	//clr_ADCF;      // 只有在没有过0时，才会启用ADC；当过0后，还未换相前不启用ADC
 }
 
 // 上升反电势过0检查
@@ -387,48 +389,48 @@ void eDownChk(){
 }
 
 void setDir(){
-    if (hv == 0)
-        dir = 1;
-    else
-        dir = 0;
+	if (hv == 0)
+		dir = 1;
+	else
+		dir = 0;
 }
 
 void setSpeed(){
-    if (hv < 819)                            // <1v 819
-        target = 800;
-    else if (hv > 819 && hv < 1638)          // <2v 1638
-        target = 1000;
-    else if (hv > 1638 && hv < 2457)          // <3v 2457
-        target = 1200;
-    else if (hv > 2457 && hv < 3276)          // 4v 3276
-        target = 1400;
+	if (hv < 819)                            // <1v 819
+		Target = 800;
+	else if (hv > 819 && hv < 1638)          // <2v 1638
+		Target = 1000;
+	else if (hv > 1638 && hv < 2457)          // <3v 2457
+		Target = 1200;
+	else if (hv > 2457 && hv < 3276)          // 4v 3276
+		Target = 1400;
 }
 
 /* 中断－ADC转换完成 [一直使能]  */
 void adcHandle() interrupt 11 {
 	unsigned int t1pv = 0;                      // timer1初值
 	switch (startLevel) {
-  case 0: {              // 定方向
-      startLevel = 1;
-      hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F);  // 得HV分压值
-      setDir();
-			Enable_ADC_AIN5; // 下一次取5v分压 speed control
-      clr_ADCF;
-      set_ADCS;
+		case 0: {              // 定方向
+				startLevel = 1;
+				hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F);  // 得HV分压值
+				setDir();
+				Enable_ADC_AIN5; // 下一次取5v分压 speed control
+				clr_ADCF;
+				set_ADCS;
 				break;
 			}
-  case 1: {             // 定speed
-      startLevel = 2;
-      hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F);  // 得5v分压值
-      setSpeed();
-      clr_EADC;  // 不再启动ADC，停用ADC中断
-      clr_EA;
-      clr_ADCF;
+		case 1: {             // 定speed
+				startLevel = 2;
+				hv = ADCRH; hv <<= 4; hv |= (ADCRL & 0X0F);  // 得5v分压值
+				setSpeed();
+				clr_EADC;  // 不再启动ADC，停用ADC中断
+				clr_EA;
+				clr_ADCF;
 				break;
 			}
 		case 2: {
 				//过0换相
-
+				set_P14;
 				zOk = 0;                 // 只要进入ADC就是为了进入新的过0点检测
 				/* ------------ PWM ON 方案 -----*/
 				if (joSwitch == 0)		// 先测中点
@@ -489,22 +491,22 @@ void countConf(){
 }
 
 /*
-void itemTest(unsigned int speed) {
-	unsigned int i2;
-	// 启动, 设定转速 
-	Target = speed;
-	// 运行时间
-	for (i2 = 0; i2<10000; i2++){
-		for (i = 0; i < 615; ++i); // wait 20s
-	} 
-	// 停
-	keepAllOff();
-	// 等一会
-	for (i2 = 0; i2<8000; i2++){    // wait 10s
-		for (i = 0; i < 615; ++i); 
-	} 
-	IE = 0X00;
-	// 退出
+   void itemTest(unsigned int speed) {
+   unsigned int i2;
+// 启动, 设定转速 
+Target = speed;
+// 运行时间
+for (i2 = 0; i2<10000; i2++){
+for (i = 0; i < 615; ++i); // wait 20s
+} 
+// 停
+keepAllOff();
+// 等一会
+for (i2 = 0; i2<8000; i2++){    // wait 10s
+for (i = 0; i < 615; ++i); 
+} 
+IE = 0X00;
+// 退出
 }
 */
 
@@ -526,12 +528,13 @@ void main(){
 	}
 
 	/*系统配置检验*/
-	ENABLE_ADC_AIN1;  // HV for dir信号检测 (startLevel =0)
-  set_EADC;
-  set_EA;
-  clr_ADCF;
-  set_ADCS;        // interrupt 11 去执行中断处理....
-
+/*
+	Enable_ADC_AIN1; // HV for dir信号检测 (startLevel =0)
+	set_EADC;
+	set_EA;
+	clr_ADCF;
+	set_ADCS;        // interrupt 11 去执行中断处理....
+*/
 	/*定位*/
 	preLoc(); 		// 内含duty设置
 	pwmStart();
@@ -545,6 +548,7 @@ void main(){
 	bldcStart();
 	nextStep();
 	setCommutation();
+	//startLevel = 2;
 
 	PID_init();
 	set_ADCEN;              //强制加速后开启ADC, 即开启自动换相
